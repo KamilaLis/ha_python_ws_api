@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package>
+  <name>ha_python_ws_api</name>
+  <version>0.0.0</version>
+  <description>Python websocket client library for Home Assistant</description>
+
+  <maintainer email="klis2@mion.elka.pw.edu.pl">Kamila</maintainer>
+
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>
