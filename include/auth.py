@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import asyncio
+import functools
 import json
 
 import asyncws
@@ -61,13 +62,58 @@ class ActiveConnection:
         self._connection = None
         self._iden = 0
 
-    def call_service(domain, service):
-        """Call """
-        await _connection.send(call_service_message(++self._iden, domain, service))
+    async def call_service(self,domain, service):
+        """Call devices services."""
+        await self._connection.send(call_service_message(++self._iden, domain, service))
+
+    async def subscribe_events(self):
+        await self._connection.send(subscribe_events_message(++self._iden))
+
+    async def auth(self):
+        """Authorize connection."""
+        await self._connection.send(auth_message()) 
+
+        while True:
+            message = await self._connection.recv()
+            if message is None:
+                break
+            print (message)
+
+    def start():
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(auth())
+        loop.close()
+
+async def createConnection():
+    ac = ActiveConnection()
+    ac._connection = await asyncws.connect('ws://localhost:8123/api/websocket')
 
 
-def auth():
-    """Authorize connection."""
-    _connection = await asyncws.connect('ws://localhost:8123/api/websocket')
-    await _connection.send(auth_message()) 
+# async def listen_for_message():
+#     while True:
+#         message = await websocket.recv()
+#         if message is None:
+#             break
+#         print (message)
 
+# loop = asyncio.get_event_loop()
+# loop.run_until_complete(main())
+# loop.close()
+
+    # async def message_handler(loop):
+    #     print('Event handler called')
+    #     message = await self._connection.recv()
+    #     print (message)
+    #     if message is None:
+    #         loop.stop()
+
+    # def start():
+    #     self._connection = await asyncws.connect('ws://localhost:8123/api/websocket')
+    #     loop = asyncio.get_event_loop()
+    #     try:
+    #         loop.call_soon(functools.partial(message_handler, loop))
+    #         print('starting event loop')
+    #         loop.run_forever()
+    #     finally:
+    #         print('closing event loop')
+    #         loop.close()
