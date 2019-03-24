@@ -6,6 +6,11 @@ import asyncws
 
 import functools
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+_LOGGER = logging.getLogger(__name__)
+
 TYPE_AUTH = 'auth'
 TYPE_AUTH_INVALID = 'auth_invalid'
 TYPE_AUTH_OK = 'auth_ok'
@@ -65,6 +70,7 @@ class WebSocketHandler:
         self._authenticated = False
         self._connection = None
         self._iden = 0
+        self._subs = {}
 
         self._loop = asyncio.get_event_loop()
         self._connection = self._loop.run_until_complete(
@@ -72,7 +78,7 @@ class WebSocketHandler:
         try:
             self._loop.run_until_complete(self.auth_phase())
         except Exception as e:
-            print(e)
+            _LOGGER.error(e)
             self._loop.run_until_complete(self._connection.close())
         # finally:
         #     self._loop.close()
@@ -96,18 +102,20 @@ class WebSocketHandler:
             msg = json.loads(message)
             if msg["type"] == TYPE_AUTH_OK:
                 self._authenticated = True
-                print("authenticated")
+                _LOGGER.debug("Client authenticated.")
                 break
             elif msg["type"] == TYPE_AUTH_INVALID:
                 raise Exception(msg["message"])
 
 
     # Subscribe to events
-    # TODO: map event type -> subscription id
-    def subscribe(self, iden, event_type):
-        self._loop.run_until_complete(self.subscribe_events(iden, event_type))
 
-    async def subscribe_events(self, iden, event_type):
+    def subscribe(self, event_type):
+        self._iden += 1
+        self._loop.run_until_complete(self.async_subscribe_events(self._iden, event_type))
+        self._subs[event_type] = self._iden
+
+    async def async_subscribe_events(self, iden, event_type):
         """Subscribe client to the event bus"""
         await self._send_message(subscribe_events_message(iden, event_type))
         while True:
@@ -117,7 +125,7 @@ class WebSocketHandler:
             msg = json.loads(message)
             if msg["type"] == "result":
                 if msg["success"] == True:
-                    print("Subscription to "+event_type+" is active.")
+                    _LOGGER.debug("Subscription to '"+event_type+"' is active.")
                     break
                 else:
                     raise Exception("Exception while subscribing event: "+msg["error"]["message"])
@@ -125,10 +133,12 @@ class WebSocketHandler:
 
     # Unsubscribing from events
 
-    def unsubscribe(self, iden, subscription_id):
-        self._loop.run_until_complete(self.unsubscribe_events(iden, subscription_id))
+    def unsubscribe(self, event_type):
+        self._iden += 1
+        self._loop.run_until_complete(self.async_unsubscribe_events(self._iden, self._subs[event_type]))
+        del self._subs[event_type]
 
-    async def unsubscribe_events(self, iden, subscription_id):
+    async def async_unsubscribe_events(self, iden, subscription_id):
         await self._send_message(unsubscribe_events_message(iden, subscription_id))
         while True:
             message = await (self._connection).recv()
@@ -137,7 +147,7 @@ class WebSocketHandler:
             msg = json.loads(message)
             if msg["type"] == "result":
                 if msg["success"] == True:
-                    print("Unsubscribing was successful.")
+                    _LOGGER.debug("Unsubscribing was successful.")
                     break
                 else:
                     raise Exception("Exception while unsubscribing event: "+msg["error"]["message"])    
@@ -145,59 +155,47 @@ class WebSocketHandler:
 
     # Calling a service
 
-    def call_service(self, iden, domain, service):
-        self._loop.run_until_complete(self.call_ha_service(iden, domain, service))
+    def call_service(self, domain, service):
+        self._iden += 1
+        self._loop.run_until_complete(self.async_call_service(self._iden, domain, service))
 
-    async def call_ha_service(self, iden, domain, service):
+    async def async_call_service(self, iden, domain, service):
+        _LOGGER.debug("Calling service '"+service+"'...")
         await self._send_message(call_service_message(iden, domain, service))
         while True:
             message = await (self._connection).recv()
             if message is None:
                 break
-            print(message)
+            # print(message)
             msg = json.loads(message)
             if msg["type"] == "result":
                 if msg["success"] == True:
-                    print("the service is done executing.")
-                    # break
+                    _LOGGER.debug("The service is done executing.")
+                    break
                 else:
                     raise Exception("Exception while calling a service: "+msg["error"]["message"])
+            # # wait for state change event
+            # if msg["type"] == TYPE_EVENT:
+            #     if domain in msg["event"]["data"]["entity_id"]:
+            #         print(msg["event"]["data"]["new_state"]["state"]) 
+            #         break
+                
+    def listen_for_message(self):
+        async def wait_for_message():
+            try:
+                await asyncio.wait_for(self.async_listen_for_message(), timeout=60.0)
+            except asyncio.TimeoutError:
+                _LOGGER.warning('timeout!')
+        self._loop.run_until_complete(wait_for_message())
 
-        # asyncio.run() Python 3.7
-
-    async def listen_for_message(self):
-        print("in listen_for_message")
+    async def async_listen_for_message(self):
+        _LOGGER.debug("Waiting for message...")
         message = await (self._connection).recv()
-        print(message)
+        # print(message)
         if message is None:
             return
-        # msg = json.loads(message)
-        # if msg["type"] == "event":
-        #     print ("handle event")
-
-    # def event_handler(self, stop=False):
-    #     print('Event handler called')
-    #     if stop:
-    #         print('stopping the loop')
-    #         self._loop.stop()
+        msg = json.loads(message)
+        if msg["type"] == TYPE_EVENT:
+            print ("handle event")
 
 
-    # def test(self):
-    #     self._loop.call_soon(functools.partial(self.event_handler))
-    #     print('starting event loop')
-    #     self._loop.call_soon(functools.partial(self.event_handler, stop=True))
- 
-    #     self._loop.run_forever()
-
-
-
-wsh = WebSocketHandler()
-try:
-    wsh.subscribe(1, EVENT_STATE_CHANGED)
-    wsh.call_service(2, "rosrobot", "locate")
-    # wsh._loop.run_until_complete(wsh.listen_for_message())
-    wsh.unsubscribe(3, 1)
-except Exception as e:
-    print(e)
-finally:
-    wsh.close()
