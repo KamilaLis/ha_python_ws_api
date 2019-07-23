@@ -54,13 +54,14 @@ def unsubscribe_events_message(iden, subscription_id):
         'subscription': subscription_id,
 }
 
-def call_service_message(iden, domain, service):
+def call_service_message(iden, domain, service, service_data):
     """Return an call_service message."""
     return {
         "id": iden,
         "type": TYPE_CALL_SERVICE,
         "domain": domain,
         "service": service,
+        "service_data":service_data,
 }
 
 
@@ -155,13 +156,13 @@ class WebSocketHandler:
 
     # Calling a service
 
-    def call_service(self, domain, service):
+    def call_service(self, domain, service, service_data):
         self._iden += 1
-        self._loop.run_until_complete(self.async_call_service(self._iden, domain, service))
+        self._loop.run_until_complete(self.async_call_service(self._iden, domain, service, service_data))
 
-    async def async_call_service(self, iden, domain, service):
+    async def async_call_service(self, iden, domain, service, service_data):
         _LOGGER.debug("Calling service '"+service+"'...")
-        await self._send_message(call_service_message(iden, domain, service))
+        await self._send_message(call_service_message(iden, domain, service, service_data))
         while True:
             message = await (self._connection).recv()
             if message is None:
