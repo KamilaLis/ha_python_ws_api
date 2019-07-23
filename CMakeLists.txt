@@ -1,25 +1,20 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(ha_python_ws_api)
 
-add_definitions(-std=c++11)
-
-find_package(catkin REQUIRED
-    COMPONENTS
+# Find other CMake/Catkin packages needed for build
+find_package(catkin REQUIRED COMPONENTS
+	rospy
 )
 
+# Enable Python module support
+catkin_python_setup()
+
+# Specify package build info export
 catkin_package(
-        INCLUDE_DIRS include
+  CATKIN_DEPENDS rospy
 )
 
-###########
-## Build ##
-###########
-
-include_directories(
-        include
-)
-
-install(DIRECTORY include/
-	DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION}
-	FILES_MATCHING PATTERN "*.h"
-)
+catkin_install_python(
+    PROGRAMS
+        bin/example.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
